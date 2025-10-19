@@ -4,6 +4,9 @@ export class Camera {
   near: number;
   far: number;
   pos: vec3;
+  pitch = 0;
+
+  zoom = 5;
 
   constructor(near: number, far: number) {
     this.near = near;
@@ -18,14 +21,18 @@ export class Camera {
       vec3.fromValues(0, 0, 0), 
       vec3.fromValues(0, 1, 0)
     );
-    const inverted = mat4.create();
-    mat4.invert(inverted, lookAtMatrix);
-    return inverted;
+    return lookAtMatrix;
+  }
+
+  right(): vec3 {
+    const viewMatrix = this.view();
+    
+    return vec3.fromValues(viewMatrix[0], viewMatrix[1], viewMatrix[2]);
   }
 
   ortho(): mat4 {
-    let l = -1, r = 1;
-    let b = -1, t = 1;
+    let l = -1 * this.zoom, r = 1 * this.zoom;
+    let b = -1 * this.zoom, t = 1 * this.zoom;
     return mat4.ortho(mat4.create(), l, r, b, t, this.near, this.far);
   }
 }

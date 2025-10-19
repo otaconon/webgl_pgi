@@ -1,6 +1,8 @@
 import {vec3, mat4} from 'gl-matrix'
-import {create_point, initCube, Quad, Point} from './primitives.js'
+import {Quad, Point} from './primitives.js'
 import {Camera} from './camera.js'
+import { loadText, createProgram } from './utils.js';
+import { drawPoints, drawTransparentPlanes } from './draw.js';
 
 (async function () {
   'use strict';
@@ -8,69 +10,6 @@ import {Camera} from './camera.js'
   const canvas = document.querySelector('canvas') as HTMLCanvasElement;
   const gl = canvas.getContext('webgl2') as WebGL2RenderingContext;
   if (!gl) throw new Error('WebGL not supported');
-
-  async function loadText(url: RequestInfo) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to load ${url}: ${res.status} ${res.statusText}`);
-    return await res.text();
-  }
-
-  function compileShader(gl: WebGL2RenderingContext, type: number, source: string) {
-    const sh = gl.createShader(type);
-
-    if (!sh) {
-      throw new Error('Failed to create vertex shader');
-    }
-
-    gl.shaderSource(sh, source);
-    gl.compileShader(sh);
-    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-      const log = gl.getShaderInfoLog(sh);
-      gl.deleteShader(sh);
-      throw new Error(`Shader compile error: ${log}`);
-    }
-    return sh;
-  }
-
-  function createProgram(gl: WebGL2RenderingContext, vsSrc: string, fsSrc: string) {
-    const vs = compileShader(gl, gl.VERTEX_SHADER, vsSrc);
-    const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSrc);
-    const prog = gl.createProgram();
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      const log = gl.getProgramInfoLog(prog);
-      gl.deleteProgram(prog);
-      throw new Error(`Program link error: ${log}`);
-    }
-    return prog;
-  }
-
-  function drawPlanes(gl: WebGL2RenderingContext, shader: WebGLProgram, quads: Quad[], camera: Camera) {
-    gl.useProgram(shader);
-
-    let uView = gl.getUniformLocation(shader, "view");
-    let uProj = gl.getUniformLocation(shader, "proj");
-
-    let view = camera.view();
-    let proj = camera.ortho();
-    gl.uniformMatrix4fv(uView, false, view);
-    gl.uniformMatrix4fv(uProj, false, proj);
-
-    for (const quad of quads) {
-      let uModel = gl.getUniformLocation(shader, "model");
-      gl.uniformMatrix4fv(uModel, false, quad.model);
-
-      let uColor = gl.getUniformLocation(shader, "color");
-      gl.uniform4fv(uColor, quad.color);
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, quad.buf.vbo);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quad.buf.ibo);
-
-      gl.drawElements(gl.TRIANGLES, quad.buf.indexCount, gl.UNSIGNED_SHORT, 0);
-    }
-  }
 
   function sortQuadsByDepth(quads: Quad[], camera: Camera): Quad[] {
     const cameraPos = camera.pos;
@@ -86,66 +25,64 @@ import {Camera} from './camera.js'
     });
   }
 
-  function drawTransparentPlanes(gl: WebGL2RenderingContext, shader: WebGLProgram, quads: Quad[], camera: Camera) {
-    gl.useProgram(shader);
+  const camera = new Camera(-100, 100);
 
-    let uView = gl.getUniformLocation(shader, "view");
-    let uProj = gl.getUniformLocation(shader, "proj");
+  let mouseX = 0, mouseY = 0;
+  let lastX = 0, lastY = 0;
+  let dx = 0, dy = 0;
+  let rightMouseDown = false;
 
-    let view = camera.view();
-    let proj = camera.ortho();
-    gl.uniformMatrix4fv(uView, false, view);
-    gl.uniformMatrix4fv(uProj, false, proj);
-
-    gl.depthMask(false);
-    gl.enable(gl.BLEND);
-    gl.enable(gl.CULL_FACE);
-    gl.blendFuncSeparate(
-      gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA,  // RGB
-      gl.ONE, gl.ONE_MINUS_SRC_ALPHA         // Alpha
-    );
-
-    gl.cullFace(gl.FRONT);
-    for (const quad of quads) {
-      let uModel = gl.getUniformLocation(shader, "model");
-      gl.uniformMatrix4fv(uModel, false, quad.model);
-
-      let uColor = gl.getUniformLocation(shader, "color");
-      gl.uniform4fv(uColor, quad.color);
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, quad.buf.vbo);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quad.buf.ibo);
-
-      gl.drawElements(gl.TRIANGLES, quad.buf.indexCount, gl.UNSIGNED_SHORT, 0);
+  canvas.addEventListener('mousedown', (event) => {
+    if (event.button === 2) {
+      rightMouseDown = true;
+      event.preventDefault();
     }
+  });
 
-    gl.depthMask(true);
-    gl.disable(gl.CULL_FACE);
-  }
-
-  function drawPoints(gl: WebGL2RenderingContext, shader: WebGLProgram, points: Point[], camera: Camera) {
-    gl.useProgram(shader);
-
-    let uView = gl.getUniformLocation(shader, "view");
-    let uProj = gl.getUniformLocation(shader, "proj");
-
-    let view = camera.view();
-    let proj = camera.ortho();
-    gl.uniformMatrix4fv(uView, false, view);
-    gl.uniformMatrix4fv(uProj, false, proj);
-
-    for (const point of points) {
-      let uModel = gl.getUniformLocation(shader, "model");
-      gl.uniformMatrix4fv(uModel, false, point.model);
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, point.buf.vbo);
-
-      gl.drawArrays(gl.POINTS, 0, 1);
+  canvas.addEventListener('mouseup', (event) => {
+    if (event.button === 2) {
+      rightMouseDown = false;
     }
-  }
+  });
 
-  gl.enable(gl.DEPTH_TEST)
-  gl.enable(gl.BLEND)
+  canvas.addEventListener('wheel', (event) => {
+    event.preventDefault();
+
+    vec3.add(camera.pos, camera.pos, vec3.fromValues(0, 0, event.deltaY));
+  });
+
+  canvas.addEventListener('contextmenu', (event) => {
+    event.preventDefault(); // Prevent right-click context menu
+  });
+
+  canvas.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = event.clientX - rect.left;
+    mouseY = event.clientY - rect.top;
+
+    const glX = (mouseX / canvas.width) * 2 - 1;
+    const glY = -((mouseY / canvas.height) * 2 - 1);
+
+    dx = lastX - glX;
+    dy = lastY - glY;
+    lastX = glX;
+    lastY = glY;
+
+    if (rightMouseDown) {
+      const rotationSpeed = 2.0;
+      const angleX = dx * rotationSpeed;
+      const angleY = dy * rotationSpeed;
+      
+      vec3.rotateY(camera.pos, camera.pos, vec3.fromValues(0, 0, 0), angleX);
+      
+      const toCamera = vec3.subtract(vec3.create(), camera.pos, vec3.fromValues(0, 0, 0));
+      const right = vec3.cross(vec3.create(), vec3.fromValues(0, 1, 0), toCamera);
+      vec3.normalize(right, right);
+      
+      const rotM = mat4.rotate(mat4.create(), mat4.create(), angleY, right);
+      vec3.transformMat4(camera.pos, camera.pos, rotM);
+    }
+  });
 
   const [quadVsSource, quadFsSource] = await Promise.all([
     loadText('../shaders/quad.vert.glsl'),
@@ -158,12 +95,6 @@ import {Camera} from './camera.js'
     loadText('../shaders/point.frag.glsl'),
   ])
   const pointShader = createProgram(gl, pointVsSource, pointFsSource);
-
-  const camera = new Camera(-10, 10);
-
-  gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-  gl.clearColor(0.07, 0.07, 0.07, 1.0);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   // Draw planes
   const baseM = mat4.scale(mat4.create(), mat4.identity(mat4.create()), vec3.fromValues(0.5, 0.5, 0.5))
@@ -190,10 +121,10 @@ import {Camera} from './camera.js'
   mat4.rotate(xyQuadsBaseM, xyQuadsBaseM, 0.8, vec3.fromValues(0, 1, 0))
   mat4.rotate(xyQuadsBaseM, xyQuadsBaseM, 1.57, vec3.fromValues(1, 0, 0))
   const xyQuadsTransfors = [
-    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(0, 0, 0.65)),
-    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(0, -2, 0.65)),
-    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(2, 0, 0.65)),
-    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(2, -2, 0.65)),
+    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(-1, 1, 0.65)),
+    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(-1, -1, 0.65)),
+    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(1, 1, 0.65)),
+    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(1, -1, 0.65)),
   ]
 
   const quads = [
@@ -207,14 +138,23 @@ import {Camera} from './camera.js'
     new Quad(gl, xyQuadsTransfors[3], new Float32Array([1, 1, 1, 0.5])),
   ];
 
-  //mat4.translate(xyQuad, xyQuad, vec3.fromValues(0, 0, 0.65));
-
-
-  const sortedQuads = sortQuadsByDepth(quads, camera);
-  drawTransparentPlanes(gl, quadShader, sortedQuads, camera);
-
-  // Draw points
-  gl.disable(gl.BLEND)
   const point = new Point(gl, new Float32Array([0, 0, 1]))
-  drawPoints(gl, pointShader, [point], camera);
+
+  gl.enable(gl.DEPTH_TEST)
+
+  function render() {
+    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    gl.clearColor(0.07, 0.07, 0.07, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    const sortedQuads = sortQuadsByDepth(quads, camera);
+    drawTransparentPlanes(gl, quadShader, sortedQuads, camera);
+
+    gl.disable(gl.BLEND);
+    drawPoints(gl, pointShader, [point], camera);
+    
+    requestAnimationFrame(render);
+  }
+
+  render();
 })();
