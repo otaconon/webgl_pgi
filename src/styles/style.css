@@ -1,13 +1,17 @@
-body, html {
+body {
   margin: 0;
   padding: 0;
-  width: 100%;
-  height: 100%;
+  height: 100vh;
+  box-sizing: border-box;
+  display: flex;
   overflow: hidden;
 }
 
-#glcanvas {
-  display: block;
-  width: 100%;
+canvas {
+  width: 50%;
   height: 100%;
+}
+
+#euclidean_space {
+  border-right: 1px solid #333;
 }
