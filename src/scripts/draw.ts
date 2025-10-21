@@ -1,5 +1,5 @@
 import { Camera } from "./camera";
-import { Point, Quad } from "./primitives";
+import { Point, Quad, Sphere } from "./primitives";
 
 export function drawTransparentPlanes(gl: WebGL2RenderingContext, shader: WebGLProgram, quads: Quad[], camera: Camera) {
   gl.useProgram(shader);
@@ -62,5 +62,36 @@ export function drawPoints(gl: WebGL2RenderingContext, shader: WebGLProgram, poi
     gl.bindBuffer(gl.ARRAY_BUFFER, point.buf.vbo);
 
     gl.drawArrays(gl.POINTS, 0, 1);
+  }
+}
+
+export function drawSpheres(gl: WebGL2RenderingContext, shader: WebGLProgram, spheres: Sphere[], camera: Camera) {
+  gl.useProgram(shader);
+
+  const aPosition = gl.getAttribLocation(shader, "aPosition");
+  gl.enableVertexAttribArray(aPosition);
+
+  let uView = gl.getUniformLocation(shader, "view");
+  let uProj = gl.getUniformLocation(shader, "proj");
+
+  let view = camera.view();
+  let proj = camera.ortho();
+  gl.uniformMatrix4fv(uView, false, view);
+  gl.uniformMatrix4fv(uProj, false, proj);
+
+  for (const sphere of spheres) {
+    let uModel = gl.getUniformLocation(shader, "model");
+    gl.uniformMatrix4fv(uModel, false, sphere.model);
+
+    let uColor = gl.getUniformLocation(shader, "color");
+    gl.uniform4fv(uColor, sphere.color);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, sphere.buf.vbo);
+    
+    gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
+    
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphere.buf.ibo);
+
+    gl.drawElements(gl.TRIANGLES, sphere.buf.indexCount, gl.UNSIGNED_SHORT, 0);
   }
 }

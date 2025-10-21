@@ -1,8 +1,8 @@
 import {vec3, mat4} from 'gl-matrix'
-import {Quad, Point} from './primitives.js'
+import {Quad, Point, Sphere} from './primitives.js'
 import {Camera} from './camera.js'
 import { loadText, createProgram } from './utils.js';
-import { drawPoints, drawTransparentPlanes } from './draw.js';
+import { drawPoints, drawTransparentPlanes, drawSpheres} from './draw.js';
 
 (async function () {
   'use strict';
@@ -48,7 +48,7 @@ import { drawPoints, drawTransparentPlanes } from './draw.js';
   canvas.addEventListener('wheel', (event) => {
     event.preventDefault();
 
-    vec3.add(camera.pos, camera.pos, vec3.fromValues(0, 0, event.deltaY));
+    camera.zoom += event.deltaY * 0.01;
   });
 
   canvas.addEventListener('contextmenu', (event) => {
@@ -64,7 +64,7 @@ import { drawPoints, drawTransparentPlanes } from './draw.js';
     const glY = -((mouseY / canvas.height) * 2 - 1);
 
     dx = lastX - glX;
-    dy = lastY - glY;
+    dy = glY - lastY;
     lastX = glX;
     lastY = glY;
 
@@ -90,15 +90,9 @@ import { drawPoints, drawTransparentPlanes } from './draw.js';
   ]);
   const quadShader = createProgram(gl, quadVsSource, quadFsSource);
 
-  const [pointVsSource, pointFsSource] = await Promise.all([
-    loadText('../shaders/point.vert.glsl'),
-    loadText('../shaders/point.frag.glsl'),
-  ])
-  const pointShader = createProgram(gl, pointVsSource, pointFsSource);
-
   // Draw planes
   const baseM = mat4.scale(mat4.create(), mat4.identity(mat4.create()), vec3.fromValues(0.5, 0.5, 0.5))
-  mat4.translate(baseM, baseM, vec3.fromValues(0, -0.5, 0))
+  mat4.translate(baseM, baseM, vec3.fromValues(0, 0, 0))
   const quadTransfroms = [
     mat4.translate(mat4.create(), baseM, vec3.fromValues(-1, 0, 0)),
     mat4.translate(mat4.create(), baseM, vec3.fromValues(1, 0, 0)),
@@ -106,14 +100,14 @@ import { drawPoints, drawTransparentPlanes } from './draw.js';
     mat4.translate(mat4.create(), baseM, vec3.fromValues(-1, 0, 0)),
   ]
 
-  const angle = 0.8;
+  const angle = 1.55;
   const rotationAxis = vec3.fromValues(0, 1, 0);
 
   let rotationMatrix = mat4.rotate(mat4.create(), mat4.identity(mat4.create()), angle, rotationAxis);
   mat4.multiply(quadTransfroms[0], rotationMatrix, quadTransfroms[0]);
   mat4.multiply(quadTransfroms[1], rotationMatrix, quadTransfroms[1]);
 
-  rotationMatrix = mat4.rotate(mat4.create(), mat4.identity(mat4.create()), -angle, rotationAxis);
+  rotationMatrix = mat4.rotate(mat4.create(), mat4.identity(mat4.create()), 0, rotationAxis);
   mat4.multiply(quadTransfroms[2], rotationMatrix, quadTransfroms[2]);
   mat4.multiply(quadTransfroms[3], rotationMatrix, quadTransfroms[3]);
 
@@ -121,10 +115,10 @@ import { drawPoints, drawTransparentPlanes } from './draw.js';
   mat4.rotate(xyQuadsBaseM, xyQuadsBaseM, 0.8, vec3.fromValues(0, 1, 0))
   mat4.rotate(xyQuadsBaseM, xyQuadsBaseM, 1.57, vec3.fromValues(1, 0, 0))
   const xyQuadsTransfors = [
-    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(-1, 1, 0.65)),
-    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(-1, -1, 0.65)),
-    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(1, 1, 0.65)),
-    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(1, -1, 0.65)),
+    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(-1, 1, 1)),
+    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(-1, -1, 1)),
+    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(1, 1, 1)),
+    mat4.translate(mat4.create(), xyQuadsBaseM, vec3.fromValues(1, -1, 1)),
   ]
 
   const quads = [
@@ -138,7 +132,14 @@ import { drawPoints, drawTransparentPlanes } from './draw.js';
     new Quad(gl, xyQuadsTransfors[3], new Float32Array([1, 1, 1, 0.5])),
   ];
 
-  const point = new Point(gl, new Float32Array([0, 0, 1]))
+  const sphereModel = mat4.identity(mat4.create());
+  mat4.scale(sphereModel, sphereModel, vec3.fromValues(0.05, 0.05, 0.05))
+  const spheres = [
+    new Sphere(gl, mat4.translate(mat4.create(), sphereModel, vec3.fromValues(-5, 0, -5)), new Float32Array([1, 1, 1, 0.5])),
+    new Sphere(gl, mat4.translate(mat4.create(), sphereModel, vec3.fromValues(-5, -10, -5)), new Float32Array([1, 0, 1, 0.5])),
+    new Sphere(gl, mat4.translate(mat4.create(), sphereModel, vec3.fromValues(0, 0, -5)), new Float32Array([1, 0, 1, 0.5])),
+    new Sphere(gl, mat4.translate(mat4.create(), sphereModel, vec3.fromValues(-5, 0, 0)), new Float32Array([1, 0, 1, 0.5])),
+  ]
 
   gl.enable(gl.DEPTH_TEST)
 
@@ -151,7 +152,7 @@ import { drawPoints, drawTransparentPlanes } from './draw.js';
     drawTransparentPlanes(gl, quadShader, sortedQuads, camera);
 
     gl.disable(gl.BLEND);
-    drawPoints(gl, pointShader, [point], camera);
+    drawSpheres(gl, quadShader, spheres, camera);
     
     requestAnimationFrame(render);
   }
