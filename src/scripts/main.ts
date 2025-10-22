@@ -1,8 +1,9 @@
-import { run } from "./app";
+import { euclidean_space } from "./euclidean_space";
+import { projection } from "./projection";
 
 (async function () {
   'use strict';
 
-  run("euclidean_space")
-  run("projections")
+  euclidean_space("euclidean_space")
+  projection("projections")
 })();

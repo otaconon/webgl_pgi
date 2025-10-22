@@ -4,7 +4,7 @@ import {Camera} from './camera.js'
 import { loadText, createProgram } from './utils.js';
 import { drawTransparentPlanes, drawSpheres} from './draw.js';
 
-export async function run(canvasId: string) {
+export async function projection(canvasId: string) {
    const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
   const gl = canvas.getContext('webgl2') as WebGL2RenderingContext;
   if (!gl) throw new Error('WebGL not supported');
