@@ -31,14 +31,14 @@ export async function run(canvasId: string) {
   let rightMouseDown = false;
 
   canvas.addEventListener('mousedown', (event) => {
-    if (event.button === 2) {
+    if (event.button === 2 || (event.button === 0 && event.altKey)) {
       rightMouseDown = true;
       event.preventDefault();
     }
   });
 
   canvas.addEventListener('mouseup', (event) => {
-    if (event.button === 2) {
+    if (event.button === 2 || event.button === 0) {
       rightMouseDown = false;
     }
   });
